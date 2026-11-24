@@ -41,3 +41,28 @@ CREATE TABLE reservas (
 CREATE INDEX idx_reservas_quadra_data ON reservas (quadra_id, data);
 CREATE INDEX idx_reservas_usuario ON reservas (usuario_id);
 
+-- Regra de negócio reforçada no banco: impede choque de horário
+-- entre reservas ATIVAS da mesma quadra no mesmo dia.
+CREATE OR REPLACE FUNCTION func_valida_choque_horario()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'ativa' AND EXISTS (
+        SELECT 1 FROM reservas r
+        WHERE r.quadra_id = NEW.quadra_id
+          AND r.data = NEW.data
+          AND r.status = 'ativa'
+          AND r.id <> COALESCE(NEW.id, -1)
+          AND NEW.hora_inicio < r.hora_fim
+          AND NEW.hora_fim > r.hora_inicio
+    ) THEN
+        RAISE EXCEPTION 'Choque de horário: a quadra já está reservada neste período.'
+            USING ERRCODE = 'P0001';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_valida_choque_horario
+BEFORE INSERT OR UPDATE ON reservas
+FOR EACH ROW EXECUTE FUNCTION func_valida_choque_horario();
+
