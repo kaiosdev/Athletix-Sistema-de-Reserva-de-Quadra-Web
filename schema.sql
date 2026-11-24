@@ -66,3 +66,9 @@ CREATE TRIGGER trg_valida_choque_horario
 BEFORE INSERT OR UPDATE ON reservas
 FOR EACH ROW EXECUTE FUNCTION func_valida_choque_horario();
 
+-- Dados iniciais de exemplo (quadras). O administrador é criado com:
+--   npm run criar-admin
+INSERT INTO quadras (nome, modalidade, tamanho, valor_hora, descricao) VALUES
+    ('Quadra 1', 'Futsal',   '40x20 m', 80.00, 'Quadra coberta com piso de alta resistência'),
+    ('Quadra 2', 'Vôlei',    '18x9 m',  60.00, 'Quadra coberta com rede regulável'),
+    ('Quadra 3', 'Basquete', '28x15 m', 70.00, 'Quadra com tabelas oficiais');
