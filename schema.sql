@@ -1,5 +1,5 @@
 -- Athletix Web - Esquema do banco PostgreSQL
--- Uso: crie o banco `athletix_db` e execute este script nele.
+-- Uso: crie o banco `athletix_web` e execute este script nele.
 
 DROP TABLE IF EXISTS reservas CASCADE;
 DROP TABLE IF EXISTS quadras CASCADE;
