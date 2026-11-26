@@ -17,6 +17,11 @@ app.use('/api/usuarios', require('./microservices/usuarios/routes'));
 app.use('/api/quadras', require('./microservices/quadras/routes'));
 app.use('/api/reservas', require('./microservices/reservas/routes'));
 
+// rota inexistente na API
+app.use('/api', (req, res) => {
+    res.status(404).json({ erro: 'Rota não encontrada.' });
+});
+
 // inicializacao do sistema
 app.listen(config.port, () => {
     console.log('Athletix rodando no endereco http://localhost:' + config.port);
