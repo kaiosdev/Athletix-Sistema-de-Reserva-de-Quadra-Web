@@ -13,6 +13,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // servicos
 app.use('/api/auth', require('./microservices/auth/routes'));
+app.use('/api/quadras', require('./microservices/quadras/routes'));
 
 // inicializacao do sistema
 app.listen(config.port, () => {
