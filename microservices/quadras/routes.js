@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../../db');
+const { dataValida } = require('../../utils/date');
 const { autenticar, exigirAdmin } = require('../../utils/auth');
 
 function formatar(q) {
@@ -31,6 +32,30 @@ router.get('/', autenticar, async (req, res) => {
     try {
         const { rows } = await pool.query('SELECT * FROM quadras ORDER BY nome');
         res.json(rows.map(formatar));
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+
+// GET /api/quadras/:id/disponibilidade?data=AAAA-MM-DD
+// Retorna os períodos já ocupados da quadra na data informada
+router.get('/:id/disponibilidade', autenticar, async (req, res) => {
+    try {
+        const { data } = req.query;
+        if (!data || !dataValida(data)) {
+            return res.status(400).json({ erro: 'Informe a data no formato AAAA-MM-DD.' });
+        }
+        const quadra = await pool.query('SELECT id FROM quadras WHERE id = $1', [req.params.id]);
+        if (quadra.rows.length === 0) return res.status(404).json({ erro: 'Quadra não encontrada.' });
+
+        const { rows } = await pool.query(
+            `SELECT to_char(hora_inicio, 'HH24:MI') AS inicio, to_char(hora_fim, 'HH24:MI') AS fim
+             FROM reservas
+             WHERE quadra_id = $1 AND data = $2 AND status = 'ativa'
+             ORDER BY hora_inicio`,
+            [req.params.id, data]
+        );
+        res.json({ quadraId: Number(req.params.id), data, ocupados: rows });
     } catch (err) {
         res.status(500).json({ erro: err.message });
     }
