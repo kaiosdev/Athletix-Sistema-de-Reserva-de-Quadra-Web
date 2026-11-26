@@ -1,6 +1,6 @@
 {
   "name": "athletix_web",
-  "version": "1.0.0",
+  "version": "0.4.0",
   "description": "Athletix Web: Sistema de Reserva de Quadras Esportivas",
   "main": "server.js",
   "scripts": {

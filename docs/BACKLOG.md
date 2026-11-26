@@ -40,7 +40,6 @@ Limite: no máximo 2 cartões em andamento por pessoa.
 
 | ID | Tarefa | Responsável | Branch | Prioridade | Prazo |
 |---|---|---|---|---|---|
-| B-03 | Rotas de autenticação, quadras, usuários e reservas | Kaio | `feature/*` | Alta | 26/11 |
 
 ### Em revisão
 
@@ -54,6 +53,7 @@ Limite: no máximo 2 cartões em andamento por pessoa.
 | P-01 | Proposta enviada e aprovada pelo professor | Equipe |
 | B-04 | `schema.sql` com tabelas, trigger e dados iniciais | Kaio |
 | B-05 | Servidor Express e conexão com o PostgreSQL | Kaio |
+| B-03 | Rotas de autenticação, quadras, usuários e reservas (release 0.4.0) | Kaio |
 
 ## Git Flow
 
