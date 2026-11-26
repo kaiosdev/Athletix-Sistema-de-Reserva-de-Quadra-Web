@@ -1,19 +1,34 @@
-const jwt = require('jsonwebtoken');
-const config = require('../config');
+const pool = require('../db');
 
-// Exige token JWT válido no cabeçalho Authorization: Bearer <token>
-function autenticar(req, res, next) {
-    const cabecalho = req.headers.authorization || '';
-    const [tipo, token] = cabecalho.split(' ');
-    if (tipo !== 'Bearer' || !token) {
-        return res.status(401).json({ erro: 'Autenticação necessária.' });
-    }
+// Lê o token do cabeçalho Authorization: Bearer <token>
+// Retorna null se não existir ou não tiver o formato de um UUID
+function lerToken(req) {
+    const [tipo, token] = (req.headers.authorization || '').split(' ');
+    const formatoUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (tipo !== 'Bearer' || !formatoUUID.test(token || '')) return null;
+    return token;
+}
+
+// Exige uma sessão válida (não expirada) na tabela sessoes
+async function autenticar(req, res, next) {
     try {
-        const dados = jwt.verify(token, config.jwtSecret);
-        req.usuario = { id: dados.id, perfil: dados.perfil };
+        const token = lerToken(req);
+        if (!token) return res.status(401).json({ erro: 'Autenticação necessária.' });
+
+        const { rows } = await pool.query(
+            `SELECT u.id, u.perfil
+             FROM sessoes s
+             JOIN usuarios u ON u.id = s.usuario_id
+             WHERE s.token = $1 AND s.expira_em > NOW()`,
+            [token]
+        );
+        if (rows.length === 0) {
+            return res.status(401).json({ erro: 'Sessão inválida ou expirada. Faça login novamente.' });
+        }
+        req.usuario = { id: rows[0].id, perfil: rows[0].perfil };
         next();
     } catch (err) {
-        res.status(401).json({ erro: 'Sessão inválida ou expirada. Faça login novamente.' });
+        res.status(500).json({ erro: err.message });
     }
 }
 
@@ -25,4 +40,4 @@ function exigirAdmin(req, res, next) {
     next();
 }
 
-module.exports = { autenticar, exigirAdmin };
+module.exports = { autenticar, exigirAdmin, lerToken };
