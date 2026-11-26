@@ -1,6 +1,10 @@
 -- Athletix Web - Esquema do banco PostgreSQL
 -- Uso: crie o banco `athletix_web` e execute este script nele.
 
+-- Extensão do próprio PostgreSQL usada para criptografar senhas
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+DROP TABLE IF EXISTS sessoes CASCADE;
 DROP TABLE IF EXISTS reservas CASCADE;
 DROP TABLE IF EXISTS quadras CASCADE;
 DROP TABLE IF EXISTS usuarios CASCADE;
@@ -13,6 +17,13 @@ CREATE TABLE usuarios (
     perfil         VARCHAR(10)  NOT NULL DEFAULT 'cliente'
                    CHECK (perfil IN ('cliente', 'admin')),
     data_cadastro  TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+-- Sessões de login: o token é gerado pelo banco e expira em 8 horas
+CREATE TABLE sessoes (
+    token       UUID      PRIMARY KEY DEFAULT gen_random_uuid(),
+    usuario_id  INT       NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+    expira_em   TIMESTAMP NOT NULL DEFAULT NOW() + INTERVAL '8 hours'
 );
 
 CREATE TABLE quadras (
