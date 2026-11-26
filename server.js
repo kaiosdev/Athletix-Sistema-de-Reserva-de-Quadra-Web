@@ -12,7 +12,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // servicos
-// (os modulos da API serao registrados aqui)
+app.use('/api/auth', require('./microservices/auth/routes'));
 
 // inicializacao do sistema
 app.listen(config.port, () => {
