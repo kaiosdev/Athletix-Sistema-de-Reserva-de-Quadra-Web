@@ -15,6 +15,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/auth', require('./microservices/auth/routes'));
 app.use('/api/usuarios', require('./microservices/usuarios/routes'));
 app.use('/api/quadras', require('./microservices/quadras/routes'));
+app.use('/api/reservas', require('./microservices/reservas/routes'));
 
 // inicializacao do sistema
 app.listen(config.port, () => {
