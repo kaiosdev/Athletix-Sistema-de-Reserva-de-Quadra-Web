@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../../db');
 const { dataBR, paraMinutos, horaValida, dataValida, hoje } = require('../../utils/date');
-const { autenticar } = require('../../utils/auth');
+const { autenticar, exigirAdmin } = require('../../utils/auth');
 
 // Todas as rotas de reservas exigem login
 router.use(autenticar);
@@ -178,6 +178,68 @@ router.post('/', async (req, res) => {
     } catch (err) {
         if (err.code === 'P0001') return res.status(409).json({ erro: MSG_CONFLITO });
         if (err.code === '23503') return res.status(400).json({ erro: 'Usuário ou quadra inexistente.' });
+        res.status(500).json({ erro: err.message });
+    }
+});
+
+// PUT /api/reservas/:id  (dono ou admin; apenas reservas ativas)
+router.put('/:id', async (req, res) => {
+    try {
+        const atual = await buscarPermitida(req, res);
+        if (!atual) return;
+        if (atual.status === 'cancelada') {
+            return res.status(400).json({ erro: 'Reservas canceladas não podem ser alteradas.' });
+        }
+
+        const { quadraId, data, horaInicio, horaFim } = req.body;
+        if (!quadraId) return res.status(400).json({ erro: 'Informe a quadra.' });
+        const erro = validarPeriodo({ data, horaInicio, horaFim });
+        if (erro) return res.status(400).json({ erro });
+
+        const quadra = await pool.query('SELECT valor_hora FROM quadras WHERE id = $1', [quadraId]);
+        if (quadra.rows.length === 0) return res.status(404).json({ erro: 'Quadra não encontrada.' });
+
+        if (await existeConflito(quadraId, data, horaInicio, horaFim, atual.id)) {
+            return res.status(409).json({ erro: MSG_CONFLITO });
+        }
+
+        const valorTotal = calcularValor(quadra.rows[0].valor_hora, horaInicio, horaFim);
+        await pool.query(
+            `UPDATE reservas SET quadra_id = $1, data = $2, hora_inicio = $3, hora_fim = $4, valor_total = $5
+             WHERE id = $6`,
+            [quadraId, data, horaInicio, horaFim, valorTotal, atual.id]
+        );
+        const { rows } = await pool.query(SELECT_RESERVAS + ' WHERE r.id = $1', [atual.id]);
+        res.json(formatar(rows[0]));
+    } catch (err) {
+        if (err.code === 'P0001') return res.status(409).json({ erro: MSG_CONFLITO });
+        res.status(500).json({ erro: err.message });
+    }
+});
+
+// PATCH /api/reservas/:id/cancelar  (dono ou admin)
+router.patch('/:id/cancelar', async (req, res) => {
+    try {
+        const atual = await buscarPermitida(req, res);
+        if (!atual) return;
+        if (atual.status === 'cancelada') {
+            return res.status(400).json({ erro: 'A reserva já está cancelada.' });
+        }
+        await pool.query("UPDATE reservas SET status = 'cancelada' WHERE id = $1", [atual.id]);
+        const { rows } = await pool.query(SELECT_RESERVAS + ' WHERE r.id = $1', [atual.id]);
+        res.json(formatar(rows[0]));
+    } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+
+// DELETE /api/reservas/:id  (admin: exclusão definitiva)
+router.delete('/:id', exigirAdmin, async (req, res) => {
+    try {
+        const { rowCount } = await pool.query('DELETE FROM reservas WHERE id = $1', [req.params.id]);
+        if (rowCount === 0) return res.status(404).json({ erro: 'Reserva não encontrada.' });
+        res.json({ ok: true });
+    } catch (err) {
         res.status(500).json({ erro: err.message });
     }
 });
