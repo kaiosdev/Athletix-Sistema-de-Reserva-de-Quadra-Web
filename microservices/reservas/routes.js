@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../../db');
-const { dataBR, dataValida } = require('../../utils/date');
+const { dataBR, paraMinutos, horaValida, dataValida, hoje } = require('../../utils/date');
 const { autenticar } = require('../../utils/auth');
 
 // Todas as rotas de reservas exigem login
@@ -34,6 +34,41 @@ function formatar(r) {
         valorTotal: Number(r.valor_total)
     };
 }
+
+// Valida data/horários; retorna mensagem de erro ou null
+function validarPeriodo({ data, horaInicio, horaFim }) {
+    if (!data || !horaInicio || !horaFim) {
+        return 'Data, horário de início e horário de fim são obrigatórios.';
+    }
+    if (!dataValida(data)) return 'Data inválida. Use o formato AAAA-MM-DD.';
+    if (!horaValida(horaInicio) || !horaValida(horaFim)) return 'Horário inválido. Use o formato HH:MM.';
+    if (paraMinutos(horaFim) <= paraMinutos(horaInicio)) {
+        return 'O horário de fim deve ser posterior ao horário de início.';
+    }
+    if (data < hoje()) return 'Não é possível reservar em uma data passada.';
+    return null;
+}
+
+// Regra de negócio: existe reserva ativa na mesma quadra/data com horário sobreposto?
+async function existeConflito(quadraId, data, horaInicio, horaFim, ignorarId) {
+    const { rows } = await pool.query(
+        `SELECT 1 FROM reservas
+         WHERE quadra_id = $1 AND data = $2 AND status = 'ativa'
+           AND id <> $3
+           AND $4::time < hora_fim AND $5::time > hora_inicio
+         LIMIT 1`,
+        [quadraId, data, ignorarId || -1, horaInicio, horaFim]
+    );
+    return rows.length > 0;
+}
+
+// Valor total = horas reservadas x valor por hora da quadra
+function calcularValor(valorHora, horaInicio, horaFim) {
+    const horas = (paraMinutos(horaFim) - paraMinutos(horaInicio)) / 60;
+    return Math.round(Number(valorHora) * horas * 100) / 100;
+}
+
+const MSG_CONFLITO = 'Choque de horário: a quadra já está reservada neste período.';
 
 // Busca uma reserva e confere se o usuário logado pode mexer nela
 async function buscarPermitida(req, res) {
@@ -109,6 +144,40 @@ router.get('/:id', async (req, res) => {
         const reserva = await buscarPermitida(req, res);
         if (reserva) res.json(formatar(reserva));
     } catch (err) {
+        res.status(500).json({ erro: err.message });
+    }
+});
+
+// POST /api/reservas  (admin pode informar usuarioId; cliente reserva para si)
+router.post('/', async (req, res) => {
+    try {
+        const { quadraId, data, horaInicio, horaFim } = req.body;
+        if (!quadraId) return res.status(400).json({ erro: 'Informe a quadra.' });
+        const erro = validarPeriodo({ data, horaInicio, horaFim });
+        if (erro) return res.status(400).json({ erro });
+
+        const usuarioId = req.usuario.perfil === 'admin' && req.body.usuarioId
+            ? req.body.usuarioId
+            : req.usuario.id;
+
+        const quadra = await pool.query('SELECT valor_hora FROM quadras WHERE id = $1', [quadraId]);
+        if (quadra.rows.length === 0) return res.status(404).json({ erro: 'Quadra não encontrada.' });
+
+        if (await existeConflito(quadraId, data, horaInicio, horaFim)) {
+            return res.status(409).json({ erro: MSG_CONFLITO });
+        }
+
+        const valorTotal = calcularValor(quadra.rows[0].valor_hora, horaInicio, horaFim);
+        const inserida = await pool.query(
+            `INSERT INTO reservas (usuario_id, quadra_id, data, hora_inicio, hora_fim, valor_total)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+            [usuarioId, quadraId, data, horaInicio, horaFim, valorTotal]
+        );
+        const { rows } = await pool.query(SELECT_RESERVAS + ' WHERE r.id = $1', [inserida.rows[0].id]);
+        res.status(201).json(formatar(rows[0]));
+    } catch (err) {
+        if (err.code === 'P0001') return res.status(409).json({ erro: MSG_CONFLITO });
+        if (err.code === '23503') return res.status(400).json({ erro: 'Usuário ou quadra inexistente.' });
         res.status(500).json({ erro: err.message });
     }
 });
